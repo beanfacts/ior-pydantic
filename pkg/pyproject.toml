@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iorpyd"
+version = "0.1.0"
+description = "Pydantic models for IOR result parsing and validation"
+authors = [
+    { name = "Tim Dettmar", email = "hpc@timd.io" }
+]
+license = "MIT"
+dependencies = [
+    "setuptools",
+    "pydantic>=2.11.0"
+]
+
+[tool.setuptools]
+packages = ["iorpyd"]
+package-dir = {"" = "src"}
