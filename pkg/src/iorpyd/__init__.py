@@ -9,7 +9,56 @@ class AccessType(str, Enum):
     WRITE = "write"
 
 
-def parse_size_str(size: str) -> int:
+def pprint_size(size: int) -> str:
+    """
+    Show size in human-readable format.
+    """
+    suffixes = [
+        ("EiB", 2 ** 60),
+        ("PiB", 2 ** 50),
+        ("TiB", 2 ** 40),
+        ("GiB", 2 ** 30),
+        ("MiB", 2 ** 20),
+        ("KiB", 2 ** 10),
+        ("bytes", 1)
+    ]
+    
+    for suffix, factor in suffixes:
+        if size >= factor:
+            return f"{size / factor:.2f} {suffix}"
+    
+    return "0 bytes"
+
+
+def pprint_num(num: float) -> str:
+    """
+    Show number in human-readable format with SI suffix.
+    """
+    suffixes = [
+        ("E", 1e18),
+        ("P", 1e15),
+        ("T", 1e12),
+        ("G", 1e9),
+        ("M", 1e6),
+        ("K", 1e3)
+    ]
+    
+    for suffix, factor in suffixes:
+        if num >= factor:
+            return f"{num / factor:.2f} {suffix}"
+    
+    return f"{num:.2f}"
+
+
+def _parse_time(time_str: str) -> datetime:
+    try:
+        return datetime.strptime(time_str, "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        # Post-processed format
+        return datetime.fromisoformat(time_str)
+
+
+def _parse_size_str(size: str) -> int:
     """
     Converts the IOR size string (e.g., "4 MiB") to an integer number of
     bytes.
@@ -31,44 +80,6 @@ def parse_size_str(size: str) -> int:
     
     return int(float(size) * units[unit])
 
-def pprint_size(size: int) -> str:
-    """
-    Show size in human-readable format.
-    """
-    suffixes = [
-        ("EiB", 2 ** 60),
-        ("PiB", 2 ** 50),
-        ("TiB", 2 ** 40),
-        ("GiB", 2 ** 30),
-        ("MiB", 2 ** 20),
-        ("KiB", 2 ** 10),
-        ("bytes", 1)
-    ]
-    
-    for suffix, factor in suffixes:
-        if size >= factor:
-            return f"{size / factor:.2f} {suffix}"
-    
-    return "0 bytes"
-
-def pprint_num(num: float) -> str:
-    """
-    Show number in human-readable format with SI suffix.
-    """
-    suffixes = [
-        ("E", 1e18),
-        ("P", 1e15),
-        ("T", 1e12),
-        ("G", 1e9),
-        ("M", 1e6),
-        ("K", 1e3)
-    ]
-    
-    for suffix, factor in suffixes:
-        if num >= factor:
-            return f"{num / factor:.2f} {suffix}"
-    
-    return f"{num:.2f}"
 
 class IORParameters(BaseModel):
     test_id: int = Field(alias="testID")
@@ -158,7 +169,7 @@ class IOROptions(BaseModel):
     @classmethod
     def parse_size_fields(cls, v):
         if isinstance(v, str):
-            return parse_size_str(v)
+            return _parse_size_str(v)
         return v
 
     class Config:
@@ -180,18 +191,32 @@ class IORResult(BaseModel):
 
     @field_validator("bw_bytes", mode="before")
     @classmethod
-    def conv_mib(cls, v):
-        return v * (2 ** 20)
+    def conv_mib(cls, v, info):
+        aliases = {
+            "bw_bytes": "bwMiB"
+        }
+        alias = aliases.get(info.field_name)
+        if alias and alias in info.data:
+            return v * (2 ** 20)
+        return v
 
     # These fields should be integers, since the transfer/block sizes must be.
     @field_validator("block_bytes", "xfer_bytes", mode="before")
     @classmethod
-    def conv_kib(cls, v):
-        return round(v * (2 ** 10))
+    def conv_kib(cls, v, info):
+        aliases = {
+            "block_bytes": "blockKiB",
+            "xfer_bytes": "xferKiB"
+        }
+        alias = aliases.get(info.field_name)
+        if alias and alias in info.data:
+            return round(v * (2 ** 10))
+        return v
 
     class Config:
         validate_by_name = True
         validate_by_alias = True
+
 
 
 class IORTest(BaseModel):
@@ -203,9 +228,9 @@ class IORTest(BaseModel):
 
     @field_validator("start_time", mode="before")
     @classmethod
-    def parse_start_time(cls, v):
+    def parse_time(cls, v):
         if isinstance(v, str):
-            return datetime.strptime(v, "%a %b %d %H:%M:%S %Y")
+            return _parse_time(v)
         return v
 
     class Config:
@@ -249,16 +274,36 @@ class IORSummary(BaseModel):
         mode="before"
     )
     @classmethod
-    def conv_mib(cls, v):
+    def conv_mib(cls, v, info):
+        # Conversion is only necessary if we are importing the raw data
+        # from IOR; if the field name is used directly, it means that
+        # it was imported into this model, then exported, and is being
+        # re-imported.
         if v is None:
             return None
-        return v * (2 ** 20) 
+        aliases = {
+            "bw_max_bytes": "bwMaxMIB",
+            "bw_min_bytes": "bwMinMIB",
+            "bw_mean_bytes": "bwMeanMIB",
+            "bw_std_bytes": "bwStdMIB",
+            "stonewall_bw_mean_bytes": "StoneWallbwMeanMIB"
+        }
+        alias = aliases.get(info.field_name)
+        if alias and alias in info.data:
+            return v * (2 ** 20)
+        return v 
     
     # Aggregate file size also an integer
     @field_validator("xsize_bytes", mode="before")
     @classmethod
-    def conv_mib_rounded(cls, v):
-        return round(v * (2 ** 20))
+    def conv_mib_rounded(cls, v, info):
+        aliases = {
+            "xsize_bytes": "xsizeMiB"
+        }
+        alias = aliases.get(info.field_name)
+        if alias and alias in info.data:
+            return round(v * (2 ** 20))
+        return v
 
     class Config:
         validate_by_name = True
@@ -277,9 +322,9 @@ class IOROutput(BaseModel):
 
     @field_validator("began", "finished", mode="before")
     @classmethod
-    def parse_datetime(cls, v):
+    def parse_time(cls, v):
         if isinstance(v, str):
-            return datetime.strptime(v, "%a %b %d %H:%M:%S %Y")
+            return _parse_time(v)
         return v
 
     class Config:
