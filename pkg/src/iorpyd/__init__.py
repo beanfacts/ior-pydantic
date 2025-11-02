@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 from enum import Enum
 
@@ -180,8 +180,8 @@ class IOROptions(BaseModel):
 class IORResult(BaseModel):
     access: AccessType
     bw_bytes: float = Field(alias="bwMiB") # converted
-    block_bytes: int = Field(alias="blockKiB") # converted
-    xfer_bytes: int = Field(alias="xferKiB") # converted
+    block_bytes: Union[int, float] = Field(alias="blockKiB") # converted
+    xfer_bytes: Union[int, float] = Field(alias="xferKiB") # converted
     iops: float
     latency: float
     open_time: float = Field(alias="openTime")
@@ -201,17 +201,21 @@ class IORResult(BaseModel):
         return v
 
     # These fields should be integers, since the transfer/block sizes must be.
+    # Accept Union[int, float] in the validator to handle fractional inputs
     @field_validator("block_bytes", "xfer_bytes", mode="before")
     @classmethod
     def conv_kib(cls, v, info):
+        if v is None:
+            return v
         aliases = {
             "block_bytes": "blockKiB",
             "xfer_bytes": "xferKiB"
         }
         alias = aliases.get(info.field_name)
         if alias and alias in info.data:
-            return round(v * (2 ** 10))
-        return v
+            # Convert to int, rounding fractional KiB values
+            return int(round(v * (2 ** 10)))
+        return int(v) if isinstance(v, float) else v
 
     class Config:
         validate_by_name = True
@@ -266,7 +270,7 @@ class IORSummary(BaseModel):
     mean_time: float = Field(alias="MeanTime")
     stonewall_time: Optional[float] = Field(default=None, alias="StoneWallTime")
     stonewall_bw_mean_bytes: Optional[float] = Field(default=None, alias="StoneWallbwMeanMIB") # converted
-    xsize_bytes: int = Field(alias="xsizeMiB") # converted
+    xsize_bytes: Union[int, float] = Field(alias="xsizeMiB") # converted
 
     @field_validator(
         "bw_max_bytes", "bw_min_bytes", "bw_mean_bytes", "bw_std_bytes",
@@ -297,13 +301,15 @@ class IORSummary(BaseModel):
     @field_validator("xsize_bytes", mode="before")
     @classmethod
     def conv_mib_rounded(cls, v, info):
+        if v is None:
+            return v
         aliases = {
             "xsize_bytes": "xsizeMiB"
         }
         alias = aliases.get(info.field_name)
         if alias and alias in info.data:
-            return round(v * (2 ** 20))
-        return v
+            return int(round(v * (2 ** 20)))
+        return int(v) if isinstance(v, float) else v
 
     class Config:
         validate_by_name = True
