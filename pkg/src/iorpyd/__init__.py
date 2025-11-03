@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Union
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import List, Optional, Union, Any
 from datetime import datetime
 from enum import Enum
 
@@ -68,7 +68,7 @@ def _parse_size_str(size: str) -> int:
         "bytes": 1,
         "byte": 1,
         "KiB": 2 ** 10,
-        "MiB": 2 ** 20,
+        "MiB": 2  ** 20,
         "GiB": 2 ** 30,
         "TiB": 2 ** 40,
         "PiB": 2 ** 50,
@@ -80,6 +80,16 @@ def _parse_size_str(size: str) -> int:
     
     return int(float(size) * units[unit])
 
+def convert_if_exist(data: dict, fields: List[str], factor: float, round_num: bool = False):
+    for field in fields:
+        if field not in data:
+            continue
+        value = data[field]
+        if value is not None:
+            converted = value * factor
+            if round_num:
+                converted = int(round(converted))
+            data[field] = converted
 
 class IORParameters(BaseModel):
     test_id: int = Field(alias="testID")
@@ -174,7 +184,7 @@ class IOROptions(BaseModel):
 
     class Config:
         validate_by_name = True
-        validate_by_alias = True
+        validate_by_alias = True    
 
 
 class IORResult(BaseModel):
@@ -189,33 +199,15 @@ class IORResult(BaseModel):
     close_time: float = Field(alias="closeTime")
     total_time: float = Field(alias="totalTime")
 
-    @field_validator("bw_bytes", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def conv_mib(cls, v, info):
-        aliases = {
-            "bw_bytes": "bwMiB"
-        }
-        alias = aliases.get(info.field_name)
-        if alias and alias in info.data:
-            return v * (2 ** 20)
-        return v
-
-    # These fields should be integers, since the transfer/block sizes must be.
-    # Accept Union[int, float] in the validator to handle fractional inputs
-    @field_validator("block_bytes", "xfer_bytes", mode="before")
-    @classmethod
-    def conv_kib(cls, v, info):
-        if v is None:
-            return v
-        aliases = {
-            "block_bytes": "blockKiB",
-            "xfer_bytes": "xferKiB"
-        }
-        alias = aliases.get(info.field_name)
-        if alias and alias in info.data:
-            # Convert to int, rounding fractional KiB values
-            return int(round(v * (2 ** 10)))
-        return int(v) if isinstance(v, float) else v
+    def convert_units(cls, data: Any) -> Any:
+        """Convert IOR units to bytes when using aliases (raw IOR output)"""
+        if not isinstance(data, dict):
+            raise ValueError("Invalid input data for IORResult")
+        convert_if_exist(data, ["bwMiB"], 2 ** 20)
+        convert_if_exist(data, ["blockKiB", "xferKiB"], 2 ** 10, round_num=True)
+        return data
 
     class Config:
         validate_by_name = True
@@ -272,44 +264,27 @@ class IORSummary(BaseModel):
     stonewall_bw_mean_bytes: Optional[float] = Field(default=None, alias="StoneWallbwMeanMIB") # converted
     xsize_bytes: Union[int, float] = Field(alias="xsizeMiB") # converted
 
-    @field_validator(
-        "bw_max_bytes", "bw_min_bytes", "bw_mean_bytes", "bw_std_bytes",
-        "stonewall_bw_mean_bytes", 
-        mode="before"
-    )
+    @model_validator(mode="before")
     @classmethod
-    def conv_mib(cls, v, info):
-        # Conversion is only necessary if we are importing the raw data
-        # from IOR; if the field name is used directly, it means that
-        # it was imported into this model, then exported, and is being
-        # re-imported.
-        if v is None:
-            return None
-        aliases = {
-            "bw_max_bytes": "bwMaxMIB",
-            "bw_min_bytes": "bwMinMIB",
-            "bw_mean_bytes": "bwMeanMIB",
-            "bw_std_bytes": "bwStdMIB",
-            "stonewall_bw_mean_bytes": "StoneWallbwMeanMIB"
-        }
-        alias = aliases.get(info.field_name)
-        if alias and alias in info.data:
-            return v * (2 ** 20)
-        return v 
-    
-    # Aggregate file size also an integer
-    @field_validator("xsize_bytes", mode="before")
-    @classmethod
-    def conv_mib_rounded(cls, v, info):
-        if v is None:
-            return v
-        aliases = {
-            "xsize_bytes": "xsizeMiB"
-        }
-        alias = aliases.get(info.field_name)
-        if alias and alias in info.data:
-            return int(round(v * (2 ** 20)))
-        return int(v) if isinstance(v, float) else v
+    def convert_units(cls, data: Any) -> Any:
+        """Convert IOR units to bytes when using aliases (raw IOR output)"""
+        if not isinstance(data, dict):
+            raise ValueError("Invalid input data for IORSummary")
+        
+        convert_if_exist(
+            data, 
+            [ 
+                "bwMaxMIB", "bwMinMIB", "bwMeanMIB", "bwStdMIB", 
+                "StoneWallbwMeanMIB"
+            ], 
+            2 ** 20
+        )
+        
+        # Should always be an integer even though it's returned as a
+        # converted float - the user cannot specify fractional bytes.
+        convert_if_exist(data, ["xsizeMiB"], 2 ** 20, round_num=True)
+        
+        return data
 
     class Config:
         validate_by_name = True
