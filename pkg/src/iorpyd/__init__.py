@@ -14,19 +14,19 @@ def pprint_size(size: int) -> str:
     Show size in human-readable format.
     """
     suffixes = [
-        ("EiB", 2 ** 60),
-        ("PiB", 2 ** 50),
-        ("TiB", 2 ** 40),
-        ("GiB", 2 ** 30),
-        ("MiB", 2 ** 20),
-        ("KiB", 2 ** 10),
-        ("bytes", 1)
+        ("EiB", 2**60),
+        ("PiB", 2**50),
+        ("TiB", 2**40),
+        ("GiB", 2**30),
+        ("MiB", 2**20),
+        ("KiB", 2**10),
+        ("bytes", 1),
     ]
-    
+
     for suffix, factor in suffixes:
         if size >= factor:
             return f"{size / factor:.2f} {suffix}"
-    
+
     return "0 bytes"
 
 
@@ -40,13 +40,13 @@ def pprint_num(num: float) -> str:
         ("T", 1e12),
         ("G", 1e9),
         ("M", 1e6),
-        ("K", 1e3)
+        ("K", 1e3),
     ]
-    
+
     for suffix, factor in suffixes:
         if num >= factor:
             return f"{num / factor:.2f} {suffix}"
-    
+
     return f"{num:.2f}"
 
 
@@ -67,20 +67,23 @@ def _parse_size_str(size: str) -> int:
     units = {
         "bytes": 1,
         "byte": 1,
-        "KiB": 2 ** 10,
-        "MiB": 2  ** 20,
-        "GiB": 2 ** 30,
-        "TiB": 2 ** 40,
-        "PiB": 2 ** 50,
-        "EiB": 2 ** 60
+        "KiB": 2**10,
+        "MiB": 2**20,
+        "GiB": 2**30,
+        "TiB": 2**40,
+        "PiB": 2**50,
+        "EiB": 2**60,
     }
-    
+
     if unit not in units:
         raise ValueError(f"Unknown unit {unit}")
-    
+
     return int(float(size) * units[unit])
 
-def convert_if_exist(data: dict, fields: List[str], factor: float, round_num: bool = False):
+
+def convert_if_exist(
+    data: dict, fields: List[str], factor: float, round_num: bool = False
+):
     for field in fields:
         if field not in data:
             continue
@@ -90,6 +93,7 @@ def convert_if_exist(data: dict, fields: List[str], factor: float, round_num: bo
             if round_num:
                 converted = int(round(converted))
             data[field] = converted
+
 
 class IORParameters(BaseModel):
     test_id: int = Field(alias="testID")
@@ -129,7 +133,9 @@ class IORParameters(BaseModel):
     keep_file_with_error: int = Field(alias="keepFileWithError")
     warning_as_errors: int = Field(alias="warningAsErrors")
     verbose: int
-    set_time_stamp_signature_incompressible_seed: int = Field(alias="setTimeStampSignature/incompressibleSeed")
+    set_time_stamp_signature_incompressible_seed: int = Field(
+        alias="setTimeStampSignature/incompressibleSeed"
+    )
     collective: int
     segment_count: int = Field(alias="segmentCount")
     transfer_size: int = Field(alias="transferSize")
@@ -157,12 +163,18 @@ class IOROptions(BaseModel):
     ordering_in_a_file: str = Field(alias="ordering in a file")
     ordering_inter_file: str = Field(alias="ordering inter file")
     task_offset: Optional[int] = Field(default=None, alias="task offset")
-    reorder_random_seed: Optional[int] = Field(default=None, alias="reorder random seed")
+    reorder_random_seed: Optional[int] = Field(
+        default=None, alias="reorder random seed"
+    )
     nodes: int
     tasks: int
     clients_per_node: int = Field(alias="clients per node")
-    memory_per_task: Optional[str] = Field(default=None, alias="memoryPerTask") # optional
-    memory_per_node: Optional[str] = Field(default=None, alias="memoryPerNode") # optional
+    memory_per_task: Optional[str] = Field(
+        default=None, alias="memoryPerTask"
+    )  # optional
+    memory_per_node: Optional[str] = Field(
+        default=None, alias="memoryPerNode"
+    )  # optional
     memory_buffer: str = Field(alias="memoryBuffer")
     data_access: str = Field(alias="dataAccess")
     gpudirect: str = Field(alias="GPUDirect")
@@ -170,10 +182,14 @@ class IOROptions(BaseModel):
     xfersize: int
     blocksize: int
     aggregate_filesize: int = Field(alias="aggregate filesize")
-    dry_run: Optional[int] = Field(default=None, alias="dryRun") # optional
-    verbose: Optional[int] = Field(default=None, alias="verbose") # optional
-    stonewalling_time: Optional[int] = Field(default=None, alias="stonewallingTime") # optional
-    stonewall_wear_out: Optional[int] = Field(default=None, alias="stoneWallingWearOut") # optional
+    dry_run: Optional[int] = Field(default=None, alias="dryRun")  # optional
+    verbose: Optional[int] = Field(default=None, alias="verbose")  # optional
+    stonewalling_time: Optional[int] = Field(
+        default=None, alias="stonewallingTime"
+    )  # optional
+    stonewall_wear_out: Optional[int] = Field(
+        default=None, alias="stoneWallingWearOut"
+    )  # optional
 
     @field_validator("xfersize", "blocksize", "aggregate_filesize", mode="before")
     @classmethod
@@ -184,14 +200,14 @@ class IOROptions(BaseModel):
 
     class Config:
         validate_by_name = True
-        validate_by_alias = True    
+        validate_by_alias = True
 
 
 class IORResult(BaseModel):
     access: AccessType
-    bw_bytes: float = Field(alias="bwMiB") # converted
-    block_bytes: Union[int, float] = Field(alias="blockKiB") # converted
-    xfer_bytes: Union[int, float] = Field(alias="xferKiB") # converted
+    bw_bytes: float = Field(alias="bwMiB")  # converted
+    block_bytes: Union[int, float] = Field(alias="blockKiB")  # converted
+    xfer_bytes: Union[int, float] = Field(alias="xferKiB")  # converted
     iops: float
     latency: float
     open_time: float = Field(alias="openTime")
@@ -205,14 +221,13 @@ class IORResult(BaseModel):
         """Convert IOR units to bytes when using aliases (raw IOR output)"""
         if not isinstance(data, dict):
             raise ValueError("Invalid input data for IORResult")
-        convert_if_exist(data, ["bwMiB"], 2 ** 20)
-        convert_if_exist(data, ["blockKiB", "xferKiB"], 2 ** 10, round_num=True)
+        convert_if_exist(data, ["bwMiB"], 2**20)
+        convert_if_exist(data, ["blockKiB", "xferKiB"], 2**10, round_num=True)
         return data
 
     class Config:
         validate_by_name = True
         validate_by_alias = True
-
 
 
 class IORTest(BaseModel):
@@ -236,6 +251,7 @@ class IORTest(BaseModel):
 
 class IORSummary(BaseModel):
     """IOR summary statistics for a test"""
+
     operation: AccessType
     api: str = Field(alias="API")
     test_id: int = Field(alias="TestID")
@@ -251,18 +267,20 @@ class IORSummary(BaseModel):
     task_per_node_offset: int = Field(alias="taskPerNodeOffset")
     reorder_tasks_random: int = Field(alias="reorderTasksRandom")
     reorder_tasks_random_seed: int = Field(alias="reorderTasksRandomSeed")
-    bw_max_bytes: float = Field(alias="bwMaxMIB") # converted
-    bw_min_bytes: float = Field(alias="bwMinMIB") # converted
-    bw_mean_bytes: float = Field(alias="bwMeanMIB") # converted
-    bw_std_bytes: float = Field(alias="bwStdMIB") # converted
+    bw_max_bytes: float = Field(alias="bwMaxMIB")  # converted
+    bw_min_bytes: float = Field(alias="bwMinMIB")  # converted
+    bw_mean_bytes: float = Field(alias="bwMeanMIB")  # converted
+    bw_std_bytes: float = Field(alias="bwStdMIB")  # converted
     ops_max: float = Field(alias="OPsMax")
     ops_min: float = Field(alias="OPsMin")
     ops_mean: float = Field(alias="OPsMean")
     ops_sd: float = Field(alias="OPsSD")
     mean_time: float = Field(alias="MeanTime")
     stonewall_time: Optional[float] = Field(default=None, alias="StoneWallTime")
-    stonewall_bw_mean_bytes: Optional[float] = Field(default=None, alias="StoneWallbwMeanMIB") # converted
-    xsize_bytes: Union[int, float] = Field(alias="xsizeMiB") # converted
+    stonewall_bw_mean_bytes: Optional[float] = Field(
+        default=None, alias="StoneWallbwMeanMIB"
+    )  # converted
+    xsize_bytes: Union[int, float] = Field(alias="xsizeMiB")  # converted
 
     @model_validator(mode="before")
     @classmethod
@@ -270,20 +288,17 @@ class IORSummary(BaseModel):
         """Convert IOR units to bytes when using aliases (raw IOR output)"""
         if not isinstance(data, dict):
             raise ValueError("Invalid input data for IORSummary")
-        
+
         convert_if_exist(
-            data, 
-            [ 
-                "bwMaxMIB", "bwMinMIB", "bwMeanMIB", "bwStdMIB", 
-                "StoneWallbwMeanMIB"
-            ], 
-            2 ** 20
+            data,
+            ["bwMaxMIB", "bwMinMIB", "bwMeanMIB", "bwStdMIB", "StoneWallbwMeanMIB"],
+            2**20,
         )
-        
+
         # Should always be an integer even though it's returned as a
         # converted float - the user cannot specify fractional bytes.
-        convert_if_exist(data, ["xsizeMiB"], 2 ** 20, round_num=True)
-        
+        convert_if_exist(data, ["xsizeMiB"], 2**20, round_num=True)
+
         return data
 
     class Config:
@@ -293,6 +308,7 @@ class IORSummary(BaseModel):
 
 class IOROutput(BaseModel):
     """Complete IOR output structure"""
+
     version: str = Field(alias="Version")
     began: datetime = Field(alias="Began")
     command_line: str = Field(alias="Command line")
