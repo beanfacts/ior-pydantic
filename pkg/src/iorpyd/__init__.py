@@ -308,6 +308,14 @@ class IORSummary(BaseModel):
         validate_by_alias = True
 
 
+class IORCombinedResult(BaseModel):
+    test_id: int
+    read_summary: Optional[IORSummary] = None
+    write_summary: Optional[IORSummary] = None
+    read_tests: List[IORTest] = []
+    write_tests: List[IORTest] = []
+
+
 class IOROutput(BaseModel):
     """Complete IOR output structure"""
 
@@ -325,6 +333,54 @@ class IOROutput(BaseModel):
         if isinstance(v, str):
             return _parse_time(v)
         return v
+
+    def combine_tests(self) -> dict[int, IORCombinedResult]:
+        """Associate summaries with their corresponding tests."""
+        read_summary: dict[int, IORSummary] = {}
+        write_summary: dict[int, IORSummary] = {}
+        read_tests: dict[int, List[IORTest]] = {}
+        write_tests: dict[int, List[IORTest]] = {}
+
+        # Collect summaries
+        for summary in self.summary:
+            if summary.operation == AccessType.READ:
+                if summary.test_id in read_summary:
+                    raise ValueError(
+                        f"Duplicate read summary for test ID {summary.test_id}"
+                    )
+                read_summary[summary.test_id] = summary
+            if summary.operation == AccessType.WRITE:
+                if summary.test_id in write_summary:
+                    raise ValueError(
+                        f"Duplicate write summary for test ID {summary.test_id}"
+                    )
+                write_summary[summary.test_id] = summary
+
+        # Collect tests, splitting results by access type
+        for test in self.tests:
+            if test.test_id not in read_summary and test.test_id not in write_summary:
+                raise ValueError(f"No summary found for test ID {test.test_id}")
+            read_results = [r for r in test.results if r.access == AccessType.READ]
+            write_results = [r for r in test.results if r.access == AccessType.WRITE]
+            if read_results:
+                read_test = test.model_copy(update={"results": read_results})
+                read_tests.setdefault(test.test_id, []).append(read_test)
+            if write_results:
+                write_test = test.model_copy(update={"results": write_results})
+                write_tests.setdefault(test.test_id, []).append(write_test)
+
+        # Combine into IORCombinedResult
+        combined_results: dict[int, IORCombinedResult] = {}
+        all_test_ids = set(read_summary.keys()).union(write_summary.keys())
+        for test_id in all_test_ids:
+            combined_results[test_id] = IORCombinedResult(
+                test_id=test_id,
+                read_summary=read_summary.get(test_id),
+                write_summary=write_summary.get(test_id),
+                read_tests=read_tests.get(test_id, []),
+                write_tests=write_tests.get(test_id, []),
+            )
+        return combined_results
 
     class Config:
         validate_by_name = True
